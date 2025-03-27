@@ -11,6 +11,8 @@ let tankVelocity = 0;
 let tankAcceleration = 0;
 let tankMaxSpeed = 0.3;
 let tankDeceleration = 0.02;
+let rotatingLeft = false;
+let rotatingRight = false;
 let lives = 3;
 let isHit = false;
 let hitTimer = 0;
@@ -356,16 +358,38 @@ function updateTankMovement() {
         const oldPosition = tank.position.clone();
         tank.translateZ(-tankVelocity);
         
-        // Check wall collisions
+        // Check collisions with walls, enemies and boundaries
+        let collided = false;
+        
+        // Check obstacles
         for (const obstacle of obstacles) {
             if (tank.position.distanceTo(obstacle.position) <
                 obstacle.geometry.parameters.width/2 + 1.5) {
-                tank.position.copy(oldPosition);
+                collided = true;
                 break;
             }
         }
         
+        // Check enemy tanks
+        if (!collided) {
+            for (const enemy of enemyTanks) {
+                if (tank.position.distanceTo(enemy.position) < 2.5) {
+                    collided = true;
+                    break;
+                }
+            }
+        }
+        
         // Check map boundaries
+        if (!collided && (Math.abs(tank.position.x) > mapSize/2 - 2 ||
+                         Math.abs(tank.position.z) > mapSize/2 - 2)) {
+            collided = true;
+        }
+        
+        if (collided) {
+            tank.position.copy(oldPosition);
+            tankVelocity *= 0.5; // Bounce back effect
+        }
         if (Math.abs(tank.position.x) > mapSize/2 - 2 ||
             Math.abs(tank.position.z) > mapSize/2 - 2) {
             tank.position.copy(oldPosition);
