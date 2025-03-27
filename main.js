@@ -8,7 +8,7 @@ let gameOver = false;
 let mapSize = 100;
 let obstacles = [];
 let tankVelocity = 0;
-let tankAcceleration = 0.01;
+let tankAcceleration = 0;
 let tankMaxSpeed = 0.3;
 let tankDeceleration = 0.02;
 let lives = 3;
@@ -118,7 +118,8 @@ function createObstacles() {
         obstacle.position.set(x, size/2, z);
         
         scene.add(obstacle);
-        miniMapScene.add(obstacle.clone());
+        obstacle.miniMapClone = obstacle.clone();
+        miniMapScene.add(obstacle.miniMapClone);
         obstacles.push(obstacle);
     }
 }
@@ -148,7 +149,23 @@ function createTank() {
     tank.health = 100;
     
     scene.add(tank);
-    miniMapScene.add(tank.clone());
+    // Create minimap clone with original colors first
+    tank.miniMapClone = tank.clone();
+    
+    // Then modify only the minimap clone's colors
+    tank.miniMapClone.children.forEach(child => {
+        if (child.material) {
+            // Save original material reference
+            const originalMaterial = child.material;
+            // Create new material for minimap with blue color
+            child.material = new THREE.MeshBasicMaterial({
+                color: 0x0000FF,
+                transparent: originalMaterial.transparent,
+                opacity: originalMaterial.opacity
+            });
+        }
+    });
+    miniMapScene.add(tank.miniMapClone);
 }
 
 function createEnemyTank() {
@@ -179,7 +196,8 @@ function createEnemyTank() {
     enemyTank.position.set(x, 0, z);
     
     scene.add(enemyTank);
-    miniMapScene.add(enemyTank.clone());
+    enemyTank.miniMapClone = enemyTank.clone();
+    miniMapScene.add(enemyTank.miniMapClone);
     enemyTanks.push(enemyTank);
 }
 
@@ -224,6 +242,9 @@ function onKeyDown(event) {
             break;
         case 'ArrowRight':
             tank.rotation.y -= rotateSpeed;
+            if (Math.abs(tankVelocity) > 0.01) {
+                tank.translateX(0.02 * tankVelocity/tankMaxSpeed);
+            }
             break;
         case ' ':
             const bulletPosition = new THREE.Vector3();
@@ -257,8 +278,13 @@ function checkCollisions() {
                     bullets.splice(i, 1);
                     
                     if (enemy.health <= 0) {
+                        // Kill effect
+                        isHit = true;
+                        hitTimer = 0;
+                        scene.background = new THREE.Color(0x00FF00); // Green flash
+                        
                         scene.remove(enemy);
-                        miniMapScene.remove(enemy.children[0].clone());
+                        miniMapScene.remove(enemyTanks[j].miniMapClone);
                         enemyTanks.splice(j, 1);
                         score += 100;
                         scoreDisplay.textContent = `Score: ${score}`;
@@ -326,7 +352,23 @@ function updateTankMovement() {
     }
     
     if (Math.abs(tankVelocity) > 0.001) {
+        const oldPosition = tank.position.clone();
         tank.translateZ(-tankVelocity);
+        
+        // Check wall collisions
+        for (const obstacle of obstacles) {
+            if (tank.position.distanceTo(obstacle.position) <
+                obstacle.geometry.parameters.width/2 + 1.5) {
+                tank.position.copy(oldPosition);
+                break;
+            }
+        }
+        
+        // Check map boundaries
+        if (Math.abs(tank.position.x) > mapSize/2 - 2 ||
+            Math.abs(tank.position.z) > mapSize/2 - 2) {
+            tank.position.copy(oldPosition);
+        }
     }
 }
 
@@ -350,9 +392,17 @@ function animate() {
     
     updateTankMovement();
     
-    camera.position.x = tank.position.x;
-    camera.position.z = tank.position.z + 5;
-    camera.rotation.y = tank.rotation.y;
+    // Improved camera follow - keeps tank centered
+    const tankWorldPosition = new THREE.Vector3();
+    tank.getWorldPosition(tankWorldPosition);
+    
+    // Camera follows 5 units behind tank, 2 units up
+    const cameraOffset = new THREE.Vector3(0, 2, 5);
+    cameraOffset.applyQuaternion(tank.quaternion);
+    camera.position.copy(tankWorldPosition).add(cameraOffset);
+    
+    // Camera looks at tank position
+    camera.lookAt(tankWorldPosition);
     
     updateBullets();
     checkCollisions();
@@ -374,6 +424,35 @@ function animate() {
             
             createBullet(bulletPosition, direction, false);
         }
+    }
+    
+    // Update minimap to center on player
+    if (tank.miniMapClone) {
+        tank.miniMapClone.rotation.copy(tank.rotation);
+        tank.miniMapClone.position.set(0, 0, 0); // Center player in minimap
+        
+        // Position other elements relative to player
+        for (const enemy of enemyTanks) {
+            if (enemy.miniMapClone) {
+                enemy.miniMapClone.rotation.copy(enemy.rotation);
+                enemy.miniMapClone.position.set(
+                    enemy.position.x - tank.position.x,
+                    0,
+                    enemy.position.z - tank.position.z
+                );
+            }
+        }
+        
+        // Position obstacles relative to player
+        obstacles.forEach(obstacle => {
+            if (obstacle.miniMapClone) {
+                obstacle.miniMapClone.position.set(
+                    obstacle.position.x - tank.position.x,
+                    0,
+                    obstacle.position.z - tank.position.z
+                );
+            }
+        });
     }
     
     renderer.render(scene, camera);
