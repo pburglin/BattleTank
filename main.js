@@ -107,7 +107,8 @@ function createUI() {
 }
 
 function createObstacles() {
-    for (let i = 0; i < 10; i++) {
+    // Create more obstacles (25 instead of 10)
+    for (let i = 0; i < 25; i++) {
         const size = 2 + Math.random() * 3;
         const geometry = new THREE.BoxGeometry(size, size, size);
         const material = new THREE.MeshBasicMaterial({ color: 0x8B4513 });
@@ -412,7 +413,26 @@ function animate() {
         if (Math.random() < 0.01) {
             enemy.rotation.y = Math.random() * Math.PI * 2;
         }
+        // Enemy movement with collision detection
+        const oldPosition = enemy.position.clone();
         enemy.translateZ(-0.05);
+        
+        // Check wall collisions
+        for (const obstacle of obstacles) {
+            if (enemy.position.distanceTo(obstacle.position) <
+                obstacle.geometry.parameters.width/2 + 1.5) {
+                enemy.position.copy(oldPosition);
+                enemy.rotation.y = Math.random() * Math.PI * 2;
+                break;
+            }
+        }
+        
+        // Check map boundaries
+        if (Math.abs(enemy.position.x) > mapSize/2 - 2 ||
+            Math.abs(enemy.position.z) > mapSize/2 - 2) {
+            enemy.position.copy(oldPosition);
+            enemy.rotation.y = Math.random() * Math.PI * 2;
+        }
         
         if (Math.random() < 0.01) {
             const bulletPosition = new THREE.Vector3();
